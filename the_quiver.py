@@ -241,7 +241,7 @@ def round_matx(A,k):
 
 # SOLUTION OF A SYSTEM OF LINEAR EQUATIONS BY GAUSS JORDAN ELIMINATION
 
-def gauss_jordan(a, b):
+def GaussJordan_Soln(a, b):
     n = len(b) 
     for m in range(n): 
 	# partial pivot step
@@ -299,40 +299,82 @@ def find_determinant(M):
         v = v*(-1)**tick
     return v
 
-# INVERSE OF A MATRIX BY DIAGONALIZATION USING GAUSSIAN ELIMINATION
+# INVERSE OF A MATRIX USING GAUSSIAN ELIMINATION
 
-def matx_inv(M):
-    n = len(M) # dimension of the matrix
-    P = [[0.0 for i in range(n)] for j in range(n)] # null matrix
-    for i in range(3): # for a 3x3 matrix, the identity
-        for j in range(3):
-            P[j][j] = 1.0
-    for i in range(n):
-        M[i].extend(P[i])
-    # Finding inverse through gaussian elimination
-    for k in range(n):
-        if abs(M[k][k]) < 1.0e-5:
-            for i in range(k+1, n):
-                if abs(M[i][k]) > abs(M[k][k]):
-                    for j in range(k, 2*n):
-                        M[k][j],M[i][j] = M[i][j], M[k][j] # placing the pivot
-                    break
-        pivot = M[k][k] # marking pivot
-        if pivot == 0: # check step
-            print("This matrix is not invertible.")
-            return
+def augment(M, X, dummy=False):
+    for i in range(len(M)):
+        if dummy:
+            M[i].insert(0, X[i])
         else:
-            for j in range(k, 2*n): # running through columns of pivot
-                M[k][j] /= pivot
-            for i in range(n): # rows of subtraction
-                if i == k or M[i][k] == 0: continue
-                factor = M[i][k]
-                for j in range(k, 2*n): # columns of subtraction
-                    M[i][j] -= factor * M[k][j]
-    for i in range(n): # displaying the inverse matrix
-        for j in range(n, len(M[0])):
-            print("{:.2f}".format(M[i][j]), end = " ") # rounding up to decimal place 2 i.e. 0.01
-        print()
+            M[i].append(X[i])
+    return M
+
+
+def de_augment(MX):
+    X = []
+    for i in range(len(MX)):
+        X.append(MX[i].pop(-1))
+    return MX, X
+
+
+def partial_pivot(M, dummy):
+    for i in range(len(M)):
+        if M[i][i] == 0:
+            for j in range(i + 1, len(M)):
+                if (
+                    abs(M[j][i]) > abs(M[i][i])
+                    and "cache" not in locals()
+                ):
+                    cache = M[j]
+                    M[j] = M[i]
+                    M[i] = cache
+                    if dummy:
+                        cache = dummy[j]
+                        dummy[j] = dummy[i]
+                        dummy[i] = cache
+            if "cache" in locals():
+                del cache
+    return M, dummy
+
+
+
+def GaussJordan(MX):
+
+    dum = null_matx(len(MX),len(MX)-1)
+
+    for r in range(len(MX)):
+        MX, dum = partial_pivot(MX, dum)
+        pivot = MX[r][r]
+        for c in range(r, len(MX[r])):
+            MX[r][c] = MX[r][c] / pivot
+        for row1 in range(len(MX)):
+            if row1 == r or MX[row1][r] == 0:
+                continue
+            factor = MX[row1][r]
+            for c in range(r, len(MX[row1])):
+                MX[row1][c] -= (
+                    factor * MX[r][c]
+                )
+    return MX
+
+
+def Inverse_GaussJordan(M):
+    # augmenting it with a unitary matrix, say U
+    for i in range(len(M)):
+        M = augment(M, ([0] * i + [1] + [0] * (len(M) - i)))
+
+    # An empty M to store the solution
+    I = []
+    for i in range(len(M)):
+        I.append([])
+
+    M = GaussJordan(M)
+
+    # unaugmenting to get the M to get the inverse
+    for i in range(len(M)):
+        M, U = de_augment(M)
+        I = augment(I, U, True)
+    return I
 
 # TRANSPOSE OF A MATRIX
 
@@ -698,6 +740,7 @@ def NewtonRaphson(x_o,e,f):
             print(str(x_o) + " is the root.")
         i += 1
     print("The root is: " + str(x_o))
+    return x_o
 
 # LAGUERRE METHOD FOR POLYNOMIALS
 
@@ -808,7 +851,200 @@ def Int_MonteCarlo(f,a,b,N):
     I = float(((b-a)*F)/N)
     return I
 
-# TRIAL
 
-def trial():
-    print("Confirmed.")
+### --- NUMERICAL 1ST ORDER DIFFERENTIAL EQUATION SOLVER --- ###
+
+# EULER METHOD (FORWARD)
+
+def Euler_FOW(f, x_0, y_0, x_max, h):
+    
+    y = y_0; x = x_0
+    X = [x_0]; Y = [y_0]
+    
+    while x < x_max:
+        
+        y += h*f(x, y)
+        x += h
+        Y.append(y)
+        X.append(x)
+
+    return X,Y
+
+# PREDICTOR CORRECTOR METHOD
+
+def PredCor(f, x_0,y_0, x_max, h ):
+    X = []
+    for i in range(math.ceil((x_max-x_0)/h)+1):
+        X.append(x_0)
+        x_0 = x_0 + h
+    Y = []
+    for i in range(len(X)):
+        Y.append(0)
+    Y[0] = y_0
+    for i in range(0, len(X)-1):
+        k1 = h*f(Y[i], X[i])
+        predict_y = k1 + Y[i]
+        k2 = h*(f(predict_y, X[i + 1]))
+        Y[i + 1] = Y[i] + ((k1 + k2)/2)
+    return X, Y
+
+# RUNGE KUTTA METHOD (RK4)
+
+#defining function for runge kutta
+def runge_kutta(f1, f2, x_0, y_0, z_0, x_n, h):  #input- initial value problem x_0, y(x_0), y'(x_0), end point, interval width
+    """ will give solution from x=x_0 to x=x_n
+    y(x_0) = y_0 
+    y'(x_0) = z_0
+    z = dy/dx
+    """
+    x_i = []
+    y_i = []
+    z_i = []      # dy/dx
+    x_i.append(x_0)
+    y_i.append(y_0)
+    z_i.append(z_0)
+
+    n = int((x_n-x_0)/h)      # no. of steps than we need
+    for i in range(n):
+        x_i.append(x_i[i] + h)
+        k1 = h * f2(x_i[i], y_i[i], z_i[i])
+        l1 = h * f1(x_i[i], y_i[i], z_i[i])
+        k2 = h * f2(x_i[i] + h/2, y_i[i] + k1/2, z_i[i] + l1/2)
+        l2 = h * f1(x_i[i] + h/2, y_i[i] + k1/2, z_i[i] + l1/2)
+        k3 = h * f2(x_i[i] + h/2, y_i[i] + k2/2, z_i[i] + l2/2)
+        l3 = h * f1(x_i[i] + h/2, y_i[i] + k2/2, z_i[i] + l2/2)
+        k4 = h * f2(x_i[i] + h, y_i[i] + k3, z_i[i] + l3)
+        l4 = h * f1(x_i[i] + h, y_i[i] + k3, z_i[i] + l3)
+
+        y_i.append(y_i[i] + (k1 + 2*k2 + 2*k3 + k4)/6)
+        z_i.append(z_i[i] + (l1 + 2*l2 + 2*l3 + l4)/6)
+    
+    return x_i,y_i,z_i
+
+# SECOND ORDER RK4 METHOD
+
+def RK4_2(f1, f2, x_0, x_max, h, y_0, z_0):
+    X = []; Y = []; Z = []
+    for i in range(math.ceil((x_max-x_0)/h)):
+        X.append(x_0)
+        x_0 = x_0 + h
+    for x in X:
+        Y.append(y_0)
+        Z.append(z_0)
+
+        m1 = h*f1(y_0, z_0, x)
+        k1 = h*f2(y_0, z_0, x)
+
+        m2 = h*f1(y_0+0.5*m1, z_0+0.5*k1, x+0.5*h)
+        k2 = h*f2(y_0+0.5*m1, z_0+0.5*k1, x+0.5*h)
+
+        m3 = h*f1(y_0+0.5*m2, z_0+0.5*k2, x+0.5*h)
+        k3 = h*f2(y_0+0.5*m2, z_0+0.5*k2, x+0.5*h)
+
+        m4 = h*f1(y_0+m3, z_0+k3, x+h)
+        k4 = h*f2(y_0+m3, z_0+k3, x+h)
+
+        y_0 += (m1 + 2*m2 + 2*m3 + m4)/6
+        z_0 += (k1 + 2*k2 + 2*k3 + k4)/6
+
+    return X, Y
+
+# function for lagrange interpolation
+def lag_interpol(zeta_h, zeta_l, yh, yl, y):
+    zeta = zeta_l + (zeta_h - zeta_l) * (y - yl)/(yh - yl)
+    return zeta
+
+
+# function for shooting method
+def SM(f1, f2, x_0, y_0, x_n, y_f, guess1, guess2, h, TOL=1e-6):
+    #z = dy/dx
+    x, y, z = runge_kutta(f1, f2, x_0, y_0, guess1, x_n, h)
+    yn = y[-1]
+
+    if abs(yn - y_f) > TOL:
+        if yn < y_f:
+            zeta_l = guess1
+            yl = yn
+
+            x, y, z = runge_kutta(f1, f2, x_0, y_0, guess2, x_n, h)
+            yn = y[-1]
+
+            if yn > y_f:
+                zeta_h = guess2
+                yh = yn
+
+                # calculate zeta using Lagrange interpolation
+                zeta = lag_interpol(zeta_h, zeta_l, yh, yl, y_f)
+
+                # using this zeta to solve using runge-kutta
+                x, y, z = runge_kutta(f1, f2, x_0, y_0, zeta, x_n, h)
+                return x, y, z
+
+            else:
+                print("Guess not good, try again.")
+
+
+        elif yn > y_f:
+            zeta_h = guess1
+            yh = yn
+
+            x, y, z = runge_kutta(f1, f2, x_0, y_0, guess2, x_n, h)
+            yn = y[-1]
+
+            if yn < y_f:
+                zeta_l = guess2
+                yl = yn
+
+                # calculate zeta using Lagrange interpolation
+                zeta = lag_interpol(zeta_h, zeta_l, yh, yl, y_f)
+
+                # using this zeta to solve using runge-kutta
+                x, y, z = runge_kutta(f1, f2, x_0, y_0, zeta, x_n, h)
+                return x, y, z
+
+            else:
+                print("Guess not good, try again")
+
+
+    else:
+        return x, y, z
+
+
+
+
+### --- GRAPH FITTING --- ###
+
+# LINEAR FITTING (LEAST SQUARES)
+
+def linear_fit(X, Y):
+    # y = mx + c, len(X) = len(Y) is assumed
+    x_mean = sum(X) / len(X)
+    y_mean = sum(Y) / len(Y)
+    m = sum((X[i] - x_mean) * (Y[i] - y_mean) for i in range(len(X))) / sum((X[i] - x_mean) ** 2 for i in range(len(X)))
+    c = y_mean - m * x_mean
+    return c, m
+
+# EXPONENTIAL FITTING (USING LINEAR FIT)
+
+def exponential_fit(xs, ys):
+    # y = a * e**(p * x)
+
+    # transforming data into linear by taking log
+    ys = list(map(math.log, ys))
+
+    # linear fit
+    c, m = linear_fit(xs, ys)
+
+    # transforming back to exponentials
+    a = math.e ** c
+    p = m
+    return a, p
+
+# PEARSON'S r
+
+def pearsons_r(xs, ys):
+    mean_x = sum(xs)/len(xs)
+    mean_y = sum(ys)/len(ys)
+
+    r = math.sqrt(sum((xs[i] - mean_x)*(ys[i] - mean_y) for i in range(len(xs)))**2/(sum((xs[i] - mean_x)**2 for i in range(len(xs)))*sum((ys[i] - mean_y)**2 for i in range(len(ys)))))
+    return r
